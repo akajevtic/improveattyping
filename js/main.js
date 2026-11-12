@@ -3,9 +3,11 @@ import { generateWords } from './generator.js';
 import { createEngine } from './engine.js';
 import { summarize } from './summary.js';
 import { keyAction } from './keys.js';
-import { loadSettings, saveSettings, clampSeconds, loadTests, loadAgg, sumKeys } from './store.js';
+import { loadSettings, saveSettings, clampSeconds, loadTests, loadAgg, sumKeys, saveTest, StorageFullError } from './store.js';
+import { analyze } from './analysis.js';
 import { weakPool, WEAK_UNLOCK_TESTS } from './weak.js';
 import { renderWords, updateWord, moveCaret, setTimer } from './view-test.js';
+import { renderResults, MIN_KEYSTROKES_TO_SAVE } from './view-results.js';
 
 const LIST_NAMES = ['english', 'english_1k', 'english_5k'];
 const BATCH = 80; // words generated at a time
@@ -148,9 +150,35 @@ function finish() {
   }));
 }
 
-// Replaced by the results screen.
-function onTestFinished(summary) {
-  setNotice(`${Math.round(summary.wpm)} wpm, ${Math.round(summary.accuracy)}% accuracy`);
+async function onTestFinished(summary) {
+  const id = run;
+  const previousTests = loadTests(storage);
+  let saved = 'yes';
+  if (summary.counts.correctKeys + summary.counts.wrongKeys < MIN_KEYSTROKES_TO_SAVE) {
+    saved = 'too-short';
+  } else {
+    try {
+      saveTest(summary, storage);
+    } catch (err) {
+      if (!(err instanceof StorageFullError)) throw err;
+      saved = 'storage-full';
+    }
+  }
+
+  const tests = loadTests(storage);
+  const missing = WEAK_UNLOCK_TESTS - tests.length;
+  let practice = { message: unlockMessage(missing) };
+  if (missing <= 0) {
+    const data = { keys: sumKeys(tests), ...loadAgg(storage) };
+    const words = weakPool(data, await loadList('english_5k'));
+    if (id !== run) return; // restarted while the list loaded
+    practice = {
+      words: [...new Set(words)].slice(0, 8),
+      keys: analyze(data).weakKeys.slice(0, 3).map((k) => k.key),
+    };
+  }
+  renderResults(el.results, { summary, previousTests, saved, practice });
+  showScreen('results');
 }
 
 function update(patch) {
@@ -214,5 +242,8 @@ el.weak.addEventListener('click', () => {
   }
   update({ weak: !settings.weak });
 });
+
+$('btn-new').addEventListener('click', () => update({}));
+$('btn-drill').addEventListener('click', () => update({ weak: true }));
 
 startTest();

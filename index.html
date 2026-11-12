@@ -18,6 +18,7 @@
   <link rel="modulepreload" href="js/analysis.js">
   <link rel="modulepreload" href="js/weak.js">
   <link rel="modulepreload" href="js/view-test.js">
+  <link rel="modulepreload" href="js/view-results.js">
   <script type="module" src="js/main.js"></script>
 </head>
 <body>
@@ -54,7 +55,49 @@
       <p class="hint"><kbd>tab</kbd> restart</p>
     </section>
 
-    <section id="results-screen" aria-label="Results" hidden></section>
+    <section id="results-screen" aria-label="Results" hidden>
+      <p id="save-note" class="notice" role="status"></p>
+
+      <div class="stats">
+        <div class="stat big"><span id="r-wpm" class="n">-</span><span class="l">wpm</span></div>
+        <div class="stat big"><span id="r-acc" class="n">-</span><span class="l">accuracy</span></div>
+        <div class="stat"><span id="r-raw" class="n">-</span><span class="l">raw wpm</span></div>
+        <div class="stat"><span id="r-diff" class="n">-</span><span class="l">vs your average</span></div>
+      </div>
+
+      <div class="grid">
+        <section class="card" aria-labelledby="h-keys">
+          <h2 id="h-keys">Keys you missed <span class="legend">redder is worse</span></h2>
+          <div id="r-keyboard" class="kb"></div>
+        </section>
+        <section class="card" aria-labelledby="h-wrong">
+          <h2 id="h-wrong">What went wrong</h2>
+          <ul id="r-wrong" class="rows"></ul>
+        </section>
+        <section class="card" aria-labelledby="h-tip">
+          <h2 id="h-tip">Tip</h2>
+          <p id="r-tip" class="tip"></p>
+        </section>
+        <section class="card" aria-labelledby="h-next">
+          <h2 id="h-next">Practice next</h2>
+          <p id="r-next-words" class="next-words"></p>
+          <p id="r-next-note" class="sub"></p>
+        </section>
+      </div>
+
+      <section id="coach-box" class="card coach" aria-labelledby="h-coach" hidden>
+        <h2 id="h-coach">AI coach <span class="legend">reads your whole history</span></h2>
+        <p id="coach-text" class="tip"></p>
+        <p id="coach-meta" class="sub"></p>
+        <button id="coach-ask" class="btn" type="button" hidden>Ask the coach</button>
+      </section>
+
+      <div class="actions">
+        <button id="btn-drill" class="btn primary" type="button">Start drill</button>
+        <button id="btn-new" class="btn" type="button">New test</button>
+        <span class="hint"><kbd>tab</kbd> new test</span>
+      </div>
+    </section>
   </main>
 </body>
 </html>
