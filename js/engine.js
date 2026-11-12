@@ -39,7 +39,14 @@ export function createEngine(words) {
 
     backspace() {
       const word = engine.words[engine.wordIndex];
-      if (word) word.typed = word.typed.slice(0, -1);
+      if (!word) return;
+      if (word.typed) {
+        word.typed = word.typed.slice(0, -1);
+        return;
+      }
+      // At the start of a word: undo the space and return to the previous word, but only if it is wrong (monkeytype's rule).
+      const previous = engine.words[engine.wordIndex - 1];
+      if (previous && previous.typed !== previous.target) engine.wordIndex--;
     },
 
     addWords(more) {

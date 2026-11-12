@@ -1,11 +1,24 @@
 import { analyze } from './analysis.js';
-import { sumKeys } from './store.js';
+import { KEYS, sumKeys } from './store.js';
 
+// The selected model decides the provider, and the provider decides which stored key is used.
 export const MODELS = [
-  { id: 'claude-opus-5-5', label: 'Claude Opus 5.5 (best, default)' },
-  { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5 (cheaper)' },
-  { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5 (cheapest)' },
+  { id: 'claude-opus-5-5', provider: 'claude', label: 'Claude Opus 5.5 (best, default)' },
+  { id: 'claude-sonnet-5-5', provider: 'claude', label: 'Claude Sonnet 5.5 (cheaper)' },
+  { id: 'claude-haiku-5-5', provider: 'claude', label: 'Claude Haiku 5.5 (cheapest)' },
+  { id: 'gemini-4-carbon', provider: 'gemini', label: 'Gemini 4 Carbon (best, paid only)' },
+  { id: 'gemini-3.6-flash', provider: 'gemini', label: 'Gemini 3.6 Flash (has a free tier)' },
+  { id: 'gemini-3.5-flash-lite', provider: 'gemini', label: 'Gemini 3.5 Flash-Lite (cheapest, has a free tier)' },
 ];
+export const PROVIDERS = {
+  claude: { name: 'Claude', keyName: KEYS.apiKey },
+  gemini: { name: 'Gemini', keyName: KEYS.geminiKey },
+};
+export const providerOf = (modelId) => MODELS.find((m) => m.id === modelId)?.provider ?? 'claude';
+
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+const GEMINI_BLOCKED = new Set(['SAFETY', 'RECITATION', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII']);
+const DECLINED = 'The model declined to answer. Try again or pick another model in Settings.';
 // Pinned on purpose: this code can see the user's API key, so never load "latest".
 export const SDK_URL = 'https://esm.sh/@anthropic-ai/sdk@1.8.0';
 export const COACH_MIN_TESTS = 3;
@@ -86,8 +99,74 @@ export function coachErrorMessage(err, Anthropic) {
   return 'Something went wrong asking the coach. Try again.';
 }
 
-// Calls Claude with the user's own key. Rejects with an Error whose message can be shown as is.
-export async function askCoach({ apiKey, model, payload, onText, loadSdk = () => import(SDK_URL) }) {
+function geminiErrorMessage(status, error) {
+  const reasons = (error.details ?? []).map((d) => d.reason);
+  if (status === 401 || reasons.includes('API_KEY_INVALID')) return 'That API key was not accepted. Check it in Settings.';
+  if (status === 403) return 'This key is not allowed to use that model. Pick another model in Settings.';
+  if (status === 404) return 'That model is not available for this key. Pick another model in Settings.';
+  if (status === 429) return 'Gemini quota or rate limit reached. Wait a minute and try again, or check your plan.';
+  if (status === 400 && error.message) return `Gemini rejected the request: ${error.message}`;
+  return `Gemini returned an error (${status}). Try again later.`;
+}
+
+// Plain fetch instead of an SDK: one streaming endpoint, and no extra third-party code that could see the key.
+async function askGemini({ apiKey, model, payload, onText, fetchImpl }) {
+  let res;
+  try {
+    res = await fetchImpl(`${GEMINI_URL}/${model}:streamGenerateContent?alt=sse`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey }, // header, so the key never sits in a URL
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: COACH_SYSTEM }] },
+        contents: [{ role: 'user', parts: [{ text: JSON.stringify(payload) }] }],
+      }),
+    });
+  } catch {
+    throw new Error('Could not reach Gemini. Check your internet connection.');
+  }
+  if (!res.ok) {
+    let error = {};
+    try { ({ error = {} } = await res.json()); } catch { /* not JSON: report the status alone */ }
+    throw new Error(geminiErrorMessage(res.status, error));
+  }
+
+  let text = '';
+  let blocked = false;
+  const read = (chunk) => {
+    const candidate = chunk.candidates?.[0];
+    if (chunk.promptFeedback?.blockReason || GEMINI_BLOCKED.has(candidate?.finishReason)) blocked = true;
+    for (const part of candidate?.content?.parts ?? []) {
+      if (part.thought || !part.text) continue; // skip the model's reasoning
+      text += part.text;
+      onText(part.text);
+    }
+  };
+
+  // Server-sent events: one `data: {json}` line per chunk. A network read can end mid-line, so keep the tail.
+  try {
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let pending = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      pending += decoder.decode(value, { stream: !done });
+      const lines = pending.split('\n');
+      pending = done ? '' : lines.pop();
+      for (const line of lines) if (line.startsWith('data:')) read(JSON.parse(line.slice(5)));
+      if (done) break;
+    }
+  } catch {
+    throw new Error('The connection to Gemini was lost. Try again.');
+  }
+
+  if (!text) throw new Error(blocked ? DECLINED : 'Gemini returned an empty answer. Try again.');
+  return text;
+}
+
+// Calls the model's provider with the user's own key. Rejects with an Error whose message can be shown as is.
+export async function askCoach({ apiKey, model, payload, onText, loadSdk = () => import(SDK_URL), fetchImpl = fetch }) {
+  if (providerOf(model) === 'gemini') return askGemini({ apiKey, model, payload, onText, fetchImpl });
+
   let Anthropic;
   try {
     ({ default: Anthropic } = await loadSdk());
@@ -115,8 +194,6 @@ export async function askCoach({ apiKey, model, payload, onText, loadSdk = () =>
     throw new Error(coachErrorMessage(err, Anthropic));
   }
 
-  if (message.stop_reason === 'refusal') {
-    throw new Error('The model declined to answer. Try again or pick another model in Settings.');
-  }
+  if (message.stop_reason === 'refusal') throw new Error(DECLINED);
   return message.content.filter((block) => block.type === 'text').map((block) => block.text).join('');
 }

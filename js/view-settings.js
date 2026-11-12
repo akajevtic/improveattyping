@@ -1,5 +1,5 @@
-import { KEYS, loadSettings, saveSettings, exportData, importData, clearData, loadTests } from './store.js';
-import { MODELS } from './coach.js';
+import { loadSettings, saveSettings, exportData, importData, clearData, loadTests } from './store.js';
+import { MODELS, PROVIDERS, providerOf } from './coach.js';
 
 const plural = (n) => `${n} test${n === 1 ? '' : 's'}`;
 
@@ -14,14 +14,24 @@ export function initSettings({ storage, onChange }) {
   const historyStatus = $('history-status');
   const importFile = $('import-file');
 
-  model.replaceChildren(...MODELS.map(({ id, label }) => new Option(label, id)));
+  model.replaceChildren(...Object.entries(PROVIDERS).map(([id, { name }]) => {
+    const group = document.createElement('optgroup');
+    group.label = name;
+    group.append(...MODELS.filter((m) => m.provider === id).map((m) => new Option(m.label, m.id)));
+    return group;
+  }));
+
+  // The key field always belongs to the provider of the selected model.
+  const provider = () => PROVIDERS[providerOf(model.value)];
 
   function refresh() {
-    const key = storage.getItem(KEYS.apiKey);
-    keyStatus.textContent = key ? `Key saved (ends in ….${key.slice(-4)})` : 'No key saved.';
-    $('remove-key').disabled = !key;
     const saved = loadSettings(storage).model;
     model.value = MODELS.some((m) => m.id === saved) ? saved : MODELS[0].id;
+    const { name, keyName } = provider();
+    const key = storage.getItem(keyName);
+    $('api-key-label').textContent = `${name} API key`;
+    keyStatus.textContent = key ? `${name} key saved (ends in ….${key.slice(-4)})` : `No ${name} key saved.`;
+    $('remove-key').disabled = !key;
     const count = loadTests(storage).length;
     historyCount.textContent = `${plural(count)} saved`;
     $('export').disabled = $('clear').disabled = count === 0;
@@ -41,7 +51,7 @@ export function initSettings({ storage, onChange }) {
     const key = keyInput.value.trim();
     if (!key) { keyStatus.textContent = 'Paste a key first.'; return; }
     try {
-      storage.setItem(KEYS.apiKey, key);
+      storage.setItem(provider().keyName, key);
     } catch {
       keyStatus.textContent = 'Could not save the key: storage is full.';
       return;
@@ -52,13 +62,15 @@ export function initSettings({ storage, onChange }) {
   });
 
   $('remove-key').addEventListener('click', () => {
-    storage.removeItem(KEYS.apiKey);
+    storage.removeItem(provider().keyName);
     refresh();
     onChange({ history: false });
   });
 
   model.addEventListener('change', () => {
     saveSettings({ ...loadSettings(storage), model: model.value }, storage);
+    keyInput.value = ''; // a half-typed key must not end up saved under the other provider
+    refresh();
     onChange({ history: false });
   });
 

@@ -4,7 +4,7 @@ import { createEngine } from './engine.js';
 import { summarize } from './summary.js';
 import { keyAction } from './keys.js';
 import {
-  KEYS, loadSettings, saveSettings, clampSeconds, loadTests, loadAgg, sumKeys, saveTest, StorageFullError,
+  loadSettings, saveSettings, clampSeconds, loadTests, loadAgg, sumKeys, saveTest, StorageFullError,
   loadCoach, saveCoach,
 } from './store.js';
 import { analyze } from './analysis.js';
@@ -12,7 +12,7 @@ import { weakPool, WEAK_UNLOCK_TESTS } from './weak.js';
 import { renderWords, updateWord, moveCaret, setTimer } from './view-test.js';
 import { renderResults, renderCoach, MIN_KEYSTROKES_TO_SAVE } from './view-results.js';
 import { initSettings } from './view-settings.js';
-import { MODELS, COACH_MIN_TESTS, buildCoachPayload, askCoach } from './coach.js';
+import { MODELS, PROVIDERS, providerOf, COACH_MIN_TESTS, buildCoachPayload, askCoach } from './coach.js';
 
 const LIST_NAMES = ['english', 'english_1k', 'english_5k'];
 const BATCH = 80; // words generated at a time
@@ -189,9 +189,21 @@ async function onTestFinished(summary) {
 
 let coachBusy = false;
 
+// The coach model in use (falls back to the default if the saved one is unknown) and its provider's stored key.
+function coachSetup() {
+  const model = MODELS.some((m) => m.id === settings.model) ? settings.model : MODELS[0].id;
+  const provider = PROVIDERS[providerOf(model)];
+  return { model, provider, apiKey: storage.getItem(provider.keyName) };
+}
+
 function showCoach(extra = {}) {
+  const { provider, apiKey } = coachSetup();
+  const otherKey = Object.values(PROVIDERS).some((p) => p !== provider && storage.getItem(p.keyName));
   renderCoach(el.results, {
-    hasKey: Boolean(storage.getItem(KEYS.apiKey)),
+    hasKey: Boolean(apiKey),
+    keyHint: otherKey
+      ? `The selected model needs a ${provider.name} API key. Add one in Settings, or pick another model there.`
+      : 'Add a Claude or Gemini API key in Settings to get coaching on your whole history.',
     enoughTests: loadTests(storage).length >= COACH_MIN_TESTS,
     last: loadCoach(storage),
     busy: coachBusy,
@@ -201,9 +213,8 @@ function showCoach(extra = {}) {
 
 // Runs only on this click: every reading costs the user money.
 async function askTheCoach() {
-  const apiKey = storage.getItem(KEYS.apiKey);
+  const { model, apiKey } = coachSetup();
   if (!apiKey || coachBusy) return;
-  const model = MODELS.some((m) => m.id === settings.model) ? settings.model : MODELS[0].id;
   const output = $('coach-text');
   coachBusy = true;
   showCoach();
@@ -257,6 +268,8 @@ document.addEventListener('keydown', (e) => {
     renderWords(el.words, engine);
   } else {
     updateWord(el.words, engine, index);
+    // moving between words changes the "finished" look of the word arrived at (backspace into a wrong word)
+    if (engine.wordIndex !== index) updateWord(el.words, engine, engine.wordIndex);
   }
   moveCaret(el.words, engine);
 });

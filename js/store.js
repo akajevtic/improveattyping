@@ -1,7 +1,8 @@
 // All persistence. Every function takes `storage` (localStorage in the app, a fake in tests).
 // shortcut: localStorage holds roughly 6,000 tests at ~0.7 KB each, move to IndexedDB when users report StorageFullError
 
-export const KEYS = { tests: 'wk.tests', agg: 'wk.agg', settings: 'wk.settings', apiKey: 'wk.apiKey', coach: 'wk.coach' };
+// apiKey is the Claude key (the name predates Gemini support; renaming it would lose keys users already saved)
+export const KEYS = { tests: 'wk.tests', agg: 'wk.agg', settings: 'wk.settings', apiKey: 'wk.apiKey', geminiKey: 'wk.geminiKey', coach: 'wk.coach' };
 export const DEFAULT_SETTINGS = { seconds: 30, punctuation: false, list: 'english', weak: false, model: 'claude-opus-5-5' };
 const APP = 'weak-keys';
 

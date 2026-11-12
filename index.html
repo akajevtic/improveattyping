@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://esm.sh; connect-src 'self' https://api.anthropic.com https://esm.sh; style-src 'self'; img-src 'self' data:">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://esm.sh; connect-src 'self' https://api.anthropic.com https://esm.sh https://generativelanguage.googleapis.com; style-src 'self'; img-src 'self' data:">
   <meta name="description" content="A typing test that finds your weak keys and words and trains them.">
   <title>Weak Keys</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2310131a'/%3E%3Crect x='14' y='7' width='4' height='18' rx='2' fill='%235eead4'/%3E%3C/svg%3E">
@@ -110,16 +110,16 @@
 
     <section aria-labelledby="h-set-coach">
       <h2 id="h-set-coach">AI coach</h2>
-      <p class="sub">The coach uses your own Claude API key and costs money per use (roughly 1 to 10 cents per reading, depending on the model). A Claude subscription does not include an API key. Your key is stored only in this browser and sent only to Claude.</p>
-      <label for="api-key">Claude API key</label>
+      <p class="sub">The coach uses your own API key, from <a href="https://platform.claude.com/" target="_blank" rel="noopener noreferrer">Claude</a> or <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google Gemini</a>. Claude costs money per use (roughly 1 to 10 cents per reading) and a Claude subscription does not include a key. Gemini has a free tier on some models; Google may use free-tier requests to improve its products. Keys are stored only in this browser and sent only to the provider you pick.</p>
+      <label for="model">Model</label>
+      <select id="model"></select>
+      <label id="api-key-label" for="api-key">API key</label>
       <div class="field-row">
         <input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="paste key here">
         <button id="save-key" class="btn" type="button">Save key</button>
         <button id="remove-key" class="btn danger" type="button">Remove key</button>
       </div>
       <p id="key-status" class="sub" role="status"></p>
-      <label for="model">Model</label>
-      <select id="model"></select>
     </section>
 
     <section aria-labelledby="h-set-history">
