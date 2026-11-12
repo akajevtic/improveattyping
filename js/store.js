@@ -97,6 +97,20 @@ export function clearData(storage) {
   for (const key of [KEYS.tests, KEYS.agg, KEYS.coach]) storage.removeItem(key);
 }
 
+// Last coach reading: { text, date, model }, or null.
+export function loadCoach(storage) {
+  try {
+    const reading = JSON.parse(storage.getItem(KEYS.coach));
+    return isObject(reading) && typeof reading.text === 'string' ? reading : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveCoach(reading, storage) {
+  try { storage.setItem(KEYS.coach, JSON.stringify(reading)); } catch { /* the reading stays on screen either way */ }
+}
+
 export function clampSeconds(value) {
   if (typeof value !== 'number' && typeof value !== 'string') return DEFAULT_SETTINGS.seconds;
   const n = Math.floor(Number(value));

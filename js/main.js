@@ -3,12 +3,16 @@ import { generateWords } from './generator.js';
 import { createEngine } from './engine.js';
 import { summarize } from './summary.js';
 import { keyAction } from './keys.js';
-import { loadSettings, saveSettings, clampSeconds, loadTests, loadAgg, sumKeys, saveTest, StorageFullError } from './store.js';
+import {
+  KEYS, loadSettings, saveSettings, clampSeconds, loadTests, loadAgg, sumKeys, saveTest, StorageFullError,
+  loadCoach, saveCoach,
+} from './store.js';
 import { analyze } from './analysis.js';
 import { weakPool, WEAK_UNLOCK_TESTS } from './weak.js';
 import { renderWords, updateWord, moveCaret, setTimer } from './view-test.js';
-import { renderResults, MIN_KEYSTROKES_TO_SAVE } from './view-results.js';
+import { renderResults, renderCoach, MIN_KEYSTROKES_TO_SAVE } from './view-results.js';
 import { initSettings } from './view-settings.js';
+import { MODELS, COACH_MIN_TESTS, buildCoachPayload, askCoach } from './coach.js';
 
 const LIST_NAMES = ['english', 'english_1k', 'english_5k'];
 const BATCH = 80; // words generated at a time
@@ -179,7 +183,45 @@ async function onTestFinished(summary) {
     };
   }
   renderResults(el.results, { summary, previousTests, saved, practice });
+  showCoach();
   showScreen('results');
+}
+
+let coachBusy = false;
+
+function showCoach(extra = {}) {
+  renderCoach(el.results, {
+    hasKey: Boolean(storage.getItem(KEYS.apiKey)),
+    enoughTests: loadTests(storage).length >= COACH_MIN_TESTS,
+    last: loadCoach(storage),
+    busy: coachBusy,
+    ...extra,
+  });
+}
+
+// Runs only on this click: every reading costs the user money.
+async function askTheCoach() {
+  const apiKey = storage.getItem(KEYS.apiKey);
+  if (!apiKey || coachBusy) return;
+  const model = MODELS.some((m) => m.id === settings.model) ? settings.model : MODELS[0].id;
+  const output = $('coach-text');
+  coachBusy = true;
+  showCoach();
+  output.textContent = '';
+  let error;
+  try {
+    const text = await askCoach({
+      apiKey,
+      model,
+      payload: buildCoachPayload(loadTests(storage), loadAgg(storage)),
+      onText: (chunk) => { output.textContent += chunk; }, // textContent: model output is never parsed as HTML
+    });
+    saveCoach({ text, date: new Date().toISOString().slice(0, 10), model }, storage);
+  } catch (err) {
+    error = err.message;
+  }
+  coachBusy = false;
+  showCoach({ error });
 }
 
 function update(patch) {
@@ -249,8 +291,11 @@ initSettings({
   onChange({ history }) {
     settings = loadSettings(storage); // the dialog writes the model choice itself
     if (history) startTest(); // saved tests changed: results on screen and weak-point mode may be stale
+    else showCoach(); // key added or removed
   },
 });
+
+$('coach-ask').addEventListener('click', askTheCoach);
 
 $('btn-new').addEventListener('click', () => update({}));
 $('btn-drill').addEventListener('click', () => update({ weak: true }));

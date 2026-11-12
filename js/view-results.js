@@ -48,6 +48,30 @@ function keyboard(keys) {
   });
 }
 
+// Coach box. `last` is the stored reading or null; `error` replaces the "last reading" line when a request failed.
+export function renderCoach(root, { hasKey, enoughTests, last, busy, error }) {
+  const $ = (id) => root.querySelector(`#${id}`);
+  const ready = hasKey && enoughTests;
+  $('coach-box').hidden = false;
+
+  const ask = $('coach-ask');
+  ask.hidden = !ready;
+  ask.disabled = busy;
+  ask.textContent = busy ? 'Reading your history…' : 'Ask the coach';
+
+  const meta = $('coach-meta');
+  meta.classList.toggle('error', Boolean(error));
+  meta.textContent = error ?? (ready && last && !busy ? `Last reading: ${last.date}` : '');
+
+  if (busy) return; // the text is being streamed in
+  $('coach-text').textContent = ready && last ? last.text : '';
+  if (!ready) {
+    meta.textContent = hasKey
+      ? 'Finish 3 tests and the coach can read your history.'
+      : 'Add a Claude API key in Settings to get coaching on your whole history.';
+  }
+}
+
 // practice is { words, keys } once weak-point mode is unlocked, otherwise { message }.
 export function renderResults(root, { summary, previousTests, saved, practice }) {
   const $ = (id) => root.querySelector(`#${id}`);
