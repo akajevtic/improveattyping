@@ -19,6 +19,8 @@
   <link rel="modulepreload" href="js/weak.js">
   <link rel="modulepreload" href="js/view-test.js">
   <link rel="modulepreload" href="js/view-results.js">
+  <link rel="modulepreload" href="js/view-settings.js">
+  <link rel="modulepreload" href="js/coach.js">
   <script type="module" src="js/main.js"></script>
 </head>
 <body>
@@ -99,5 +101,43 @@
       </div>
     </section>
   </main>
+
+  <dialog id="settings" aria-labelledby="h-settings">
+    <div class="dialog-head">
+      <h1 id="h-settings">Settings</h1>
+      <button id="close-settings" class="quiet" type="button">close</button>
+    </div>
+
+    <section aria-labelledby="h-set-coach">
+      <h2 id="h-set-coach">AI coach</h2>
+      <p class="sub">The coach uses your own Claude API key and costs money per use (roughly 1 to 10 cents per reading, depending on the model). A Claude subscription does not include an API key. Your key is stored only in this browser and sent only to Claude.</p>
+      <label for="api-key">Claude API key</label>
+      <div class="field-row">
+        <input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="paste key here">
+        <button id="save-key" class="btn" type="button">Save key</button>
+        <button id="remove-key" class="btn danger" type="button">Remove key</button>
+      </div>
+      <p id="key-status" class="sub" role="status"></p>
+      <label for="model">Model</label>
+      <select id="model"></select>
+    </section>
+
+    <section aria-labelledby="h-set-history">
+      <h2 id="h-set-history">History</h2>
+      <p id="history-count" class="count"></p>
+      <div class="field-row">
+        <button id="export" class="btn" type="button">Export history</button>
+        <button id="import" class="btn" type="button">Import history</button>
+        <button id="clear" class="btn danger" type="button">Clear history</button>
+      </div>
+      <input id="import-file" type="file" accept="application/json,.json" hidden>
+      <p id="history-status" class="sub" role="status"></p>
+    </section>
+
+    <section aria-labelledby="h-set-about">
+      <h2 id="h-set-about">About</h2>
+      <p class="sub">Word lists from <a href="https://github.com/monkeytypegame/monkeytype" target="_blank" rel="noopener noreferrer">monkeytype</a> (GPL-3.0). Weak Keys is free software under GPL-3.0. Your typing history never leaves this browser.</p>
+    </section>
+  </dialog>
 </body>
 </html>

@@ -303,6 +303,47 @@ kbd {
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn.danger:hover:not(:disabled) { border-color: var(--error); color: var(--error); }
 
+/* ---------- settings dialog ---------- */
+
+dialog {
+  width: min(34rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  padding: 1.5rem 1.6rem 1.7rem;
+  border: 1px solid var(--edge);
+  border-radius: 18px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+  scrollbar-width: thin;
+  scrollbar-color: var(--edge) transparent;
+}
+dialog::backdrop { background: rgba(8, 10, 15, 0.72); backdrop-filter: blur(3px); }
+dialog[open] { animation: rise 180ms ease-out; }
+
+.dialog-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem; }
+dialog h1 { margin: 0; font-size: 1.2rem; font-weight: 600; }
+dialog section { padding: 1.1rem 0 0.2rem; border-top: 1px solid var(--edge); margin-top: 1.1rem; }
+dialog h2 { margin: 0 0 0.6rem; color: var(--accent); font-size: 0.72rem; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; }
+dialog label { display: block; margin: 1rem 0 0.4rem; color: var(--muted); font-size: 0.82rem; }
+dialog .sub { line-height: 1.6; }
+dialog .sub[role="status"] { min-height: 1.3rem; margin-top: 0.55rem; }
+dialog a { color: var(--accent); }
+dialog .count { margin: 0 0 0.8rem; }
+
+.field-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+dialog input[type="password"],
+dialog select {
+  height: 2.6rem;
+  padding: 0 0.9rem;
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+}
+dialog input[type="password"] { flex: 1 1 12rem; min-width: 0; }
+dialog select { width: 100%; cursor: pointer; }
+dialog input::placeholder { color: var(--dim); }
+
 @media (max-width: 760px) {
   .grid { grid-template-columns: 1fr; }
   .stats { gap: 1.5rem; }

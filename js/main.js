@@ -8,6 +8,7 @@ import { analyze } from './analysis.js';
 import { weakPool, WEAK_UNLOCK_TESTS } from './weak.js';
 import { renderWords, updateWord, moveCaret, setTimer } from './view-test.js';
 import { renderResults, MIN_KEYSTROKES_TO_SAVE } from './view-results.js';
+import { initSettings } from './view-settings.js';
 
 const LIST_NAMES = ['english', 'english_1k', 'english_5k'];
 const BATCH = 80; // words generated at a time
@@ -241,6 +242,14 @@ el.weak.addEventListener('click', () => {
     return;
   }
   update({ weak: !settings.weak });
+});
+
+initSettings({
+  storage,
+  onChange({ history }) {
+    settings = loadSettings(storage); // the dialog writes the model choice itself
+    if (history) startTest(); // saved tests changed: results on screen and weak-point mode may be stale
+  },
 });
 
 $('btn-new').addEventListener('click', () => update({}));
