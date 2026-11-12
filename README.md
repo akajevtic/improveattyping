@@ -2,6 +2,8 @@
 
 A typing test in the browser that finds the keys and words you type badly and trains exactly those. It runs entirely on your machine: no account, no server, nothing to install.
 
+**Try it:** <https://weakkeys.netlify.app/>
+
 ## Features
 
 - Timed tests on random common words, lowercase or with punctuation and capitals. Pick 15, 30, 60 or 120 seconds, or any custom length.
@@ -16,18 +18,10 @@ A typing test in the browser that finds the keys and words you type badly and tr
 The page uses JavaScript modules, so it needs a web server; opening `index.html` straight from disk will not work.
 
 ```bash
-python -m http.server 5173
+python -m http.server 8000
 ```
 
-Then open <http://localhost:5173>.
-
-## Tests
-
-Needs a recent Node (developed on Node 26). No packages to install.
-
-```bash
-npm test
-```
+Then open <http://localhost:8000>.
 
 ## Publish on GitHub Pages
 
@@ -59,7 +53,7 @@ Each test is stored as a summary (scores, per-key misses, letter-pair times, per
 
 ## Credits
 
-Word lists come from [monkeytype](https://github.com/monkeytypegame/monkeytype), which is licensed under GPL-3.0. `tools/fetch-words.mjs` downloads and converts them.
+Word lists come from [monkeytype](https://github.com/monkeytypegame/monkeytype), which is licensed under GPL-3.0.
 
 ## License
 

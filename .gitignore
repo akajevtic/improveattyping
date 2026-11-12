@@ -1,3 +1,7 @@
 .superpowers/
 node_modules/
 .claude/
+docs/
+tests/
+tools/
+package.json
