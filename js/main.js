@@ -4,7 +4,7 @@ import { createEngine } from './engine.js';
 import { summarize } from './summary.js';
 import { keyAction } from './keys.js';
 import {
-  loadSettings, saveSettings, clampSeconds, loadTests, loadAgg, sumKeys, saveTest, StorageFullError,
+  loadSettings, saveSettings, clampSeconds, loadTests, loadAgg, loadQuits, historyKeys, saveTest, saveQuit, StorageFullError,
   loadCoach, saveCoach,
 } from './store.js';
 import { analyze } from './analysis.js';
@@ -100,12 +100,35 @@ function syncModebar() {
   el.list.disabled = settings.weak; // weak-point mode builds its own word pool
 }
 
+// An attempt quit before the timer ended (restart, reload, changed option) still counts toward weak keys,
+// pairs and words. It is stored apart from finished tests, so it never touches speed or accuracy history.
+// Returns false only when it could not be saved.
+function abandon() {
+  if (phase !== 'running' || !engine) return true;
+  clearInterval(ticker);
+  phase = 'idle';
+  const { seconds, punctuation, list, weak } = settings;
+  try {
+    saveQuit(summarize({
+      engine,
+      durationMs: Math.max(1, Math.round(performance.now() - startedAt)),
+      settings: { seconds, punctuation, list, weak },
+      date: new Date().toISOString(),
+      abandoned: true,
+    }), storage);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function startTest() {
+  const counted = abandon();
   const id = ++run;
   clearInterval(ticker);
   engine = null;
   phase = 'idle';
-  setNotice('');
+  setNotice(counted ? '' : 'Storage is full. That attempt was not counted. Export your history in Settings, then clear it.');
   showScreen('test');
 
   const tests = loadTests(storage);
@@ -117,8 +140,9 @@ export async function startTest() {
   setTimer(el.timer, settings.seconds);
   el.timer.classList.remove('running');
 
+  const agg = loadAgg(storage);
   const source = settings.weak
-    ? weakPool({ keys: sumKeys(tests), ...loadAgg(storage) }, await loadList('english_5k'))
+    ? weakPool({ keys: historyKeys(tests, agg), ...agg }, await loadList('english_5k'))
     : await loadList(settings.list);
   if (id !== run) return; // a newer start replaced this one while the list loaded
 
@@ -174,7 +198,8 @@ async function onTestFinished(summary) {
   const missing = WEAK_UNLOCK_TESTS - tests.length;
   let practice = { message: unlockMessage(missing) };
   if (missing <= 0) {
-    const data = { keys: sumKeys(tests), ...loadAgg(storage) };
+    const agg = loadAgg(storage);
+    const data = { keys: historyKeys(tests, agg), ...agg };
     const words = weakPool(data, await loadList('english_5k'));
     if (id !== run) return; // restarted while the list loaded
     practice = {
@@ -224,7 +249,7 @@ async function askTheCoach() {
     const text = await askCoach({
       apiKey,
       model,
-      payload: buildCoachPayload(loadTests(storage), loadAgg(storage)),
+      payload: buildCoachPayload(loadTests(storage), loadAgg(storage), loadQuits(storage)),
       onText: (chunk) => { output.textContent += chunk; }, // textContent: model output is never parsed as HTML
     });
     saveCoach({ text, date: new Date().toISOString().slice(0, 10), model }, storage);
@@ -236,6 +261,7 @@ async function askTheCoach() {
 }
 
 function update(patch) {
+  abandon(); // before the options change, so the attempt is recorded with the options it was typed under
   settings = { ...settings, ...patch };
   saveSettings(settings, storage);
   document.activeElement?.blur(); // hand the keyboard back to the test
@@ -281,6 +307,7 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
+window.addEventListener('pagehide', abandon); // Ctrl+R or closing the tab mid-test
 window.addEventListener('resize', () => { if (engine) moveCaret(el.words, engine); });
 
 el.punct.addEventListener('click', () => update({ punctuation: !settings.punctuation }));
@@ -303,8 +330,14 @@ initSettings({
   storage,
   onChange({ history }) {
     settings = loadSettings(storage); // the dialog writes the model choice itself
-    if (history) startTest(); // saved tests changed: results on screen and weak-point mode may be stale
-    else showCoach(); // key added or removed
+    if (history) {
+      // History was just imported or cleared: a test still running behind the dialog must not be written into it.
+      clearInterval(ticker);
+      phase = 'idle';
+      startTest(); // results on screen and weak-point mode may be stale
+    } else {
+      showCoach(); // key added or removed
+    }
   },
 });
 

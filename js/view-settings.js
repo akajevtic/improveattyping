@@ -1,7 +1,8 @@
-import { loadSettings, saveSettings, exportData, importData, clearData, loadTests } from './store.js';
+import { loadSettings, saveSettings, exportData, importData, clearData, loadTests, loadAgg } from './store.js';
 import { MODELS, PROVIDERS, providerOf } from './coach.js';
 
 const plural = (n) => `${n} test${n === 1 ? '' : 's'}`;
+const attempts = (n) => `${n} abandoned attempt${n === 1 ? '' : 's'}`;
 
 // Wires the settings dialog. onChange({ history }) fires after anything changed; history is true when saved tests changed.
 export function initSettings({ storage, onChange }) {
@@ -21,6 +22,10 @@ export function initSettings({ storage, onChange }) {
     return group;
   }));
 
+  // Finished tests, and attempts quit early (those count toward weak keys but not toward scores).
+  const counts = () => ({ tests: loadTests(storage).length, quits: loadAgg(storage).quitCount ?? 0 });
+  const describe = ({ tests, quits }) => (quits ? `${plural(tests)}, ${attempts(quits)}` : plural(tests));
+
   // The key field always belongs to the provider of the selected model.
   const provider = () => PROVIDERS[providerOf(model.value)];
 
@@ -32,9 +37,9 @@ export function initSettings({ storage, onChange }) {
     $('api-key-label').textContent = `${name} API key`;
     keyStatus.textContent = key ? `${name} key saved (ends in ….${key.slice(-4)})` : `No ${name} key saved.`;
     $('remove-key').disabled = !key;
-    const count = loadTests(storage).length;
-    historyCount.textContent = `${plural(count)} saved`;
-    $('export').disabled = $('clear').disabled = count === 0;
+    const { tests, quits } = counts();
+    historyCount.textContent = `${plural(tests)} saved${quits ? `, ${attempts(quits)} counted` : ''}`;
+    $('export').disabled = $('clear').disabled = tests + quits === 0;
   }
 
   $('open-settings').addEventListener('click', () => {
@@ -89,8 +94,8 @@ export function initSettings({ storage, onChange }) {
     const [file] = importFile.files;
     importFile.value = ''; // so choosing the same file again fires change
     if (!file) return;
-    const current = loadTests(storage).length;
-    if (current && !confirm(`Importing replaces your current history (${plural(current)}). Continue?`)) return;
+    const current = counts();
+    if (current.tests + current.quits && !confirm(`Importing replaces your current history (${describe(current)}). Continue?`)) return;
     try {
       const count = importData(await file.text(), storage);
       historyStatus.textContent = `Imported ${plural(count)}.`;
@@ -103,8 +108,7 @@ export function initSettings({ storage, onChange }) {
   });
 
   $('clear').addEventListener('click', () => {
-    const count = loadTests(storage).length;
-    if (!confirm(`Delete all ${count} saved tests? This cannot be undone.`)) return;
+    if (!confirm(`Delete your whole typing history (${describe(counts())})? This cannot be undone.`)) return;
     clearData(storage);
     historyStatus.textContent = 'History cleared.';
     refresh();

@@ -5,8 +5,10 @@ const isLetter = (ch) => ch >= 'a' && ch <= 'z';
 
 export const normalizeWord = (target) => target.toLowerCase().replace(/[^a-z']/g, '');
 
-// Compact record of one finished test. Raw keystrokes are not kept.
-export function summarize({ engine, durationMs, settings, date }) {
+// Compact record of one test. Raw keystrokes are not kept.
+// `abandoned` marks an attempt the user quit before the timer ended (restart, reload): it also records
+// the word they were on if it had a mistake, and the mistake that came right before quitting.
+export function summarize({ engine, durationMs, settings, date, abandoned = false }) {
   const { words, wordIndex, keystrokes } = engine;
   const counts = { correctWordChars: 0, allChars: wordIndex, correctKeys: 0, wrongKeys: 0 };
   const keys = {};
@@ -52,9 +54,11 @@ export function summarize({ engine, durationMs, settings, date }) {
     counts.allChars += typed.length;
     if (i === wordIndex) {
       if (typed && target.startsWith(typed)) counts.correctWordChars += typed.length;
-      return;
+      // A word cut off by the timer says nothing. A word quit right after a mistake is one that needs practice.
+      if (!(abandoned && perWord[i]?.err)) return;
+    } else if (typed === target) {
+      counts.correctWordChars += target.length + 1;
     }
-    if (typed === target) counts.correctWordChars += target.length + 1;
     const name = normalizeWord(target);
     if (!name) return;
     const stat = (wordStats[name] ??= { n: 0, err: 0, ms: 0 });
@@ -62,6 +66,13 @@ export function summarize({ engine, durationMs, settings, date }) {
     stat.err += perWord[i]?.err ?? 0;
     stat.ms += perWord[i]?.ms ?? 0;
   });
+
+  const lastWrong = keystrokes.findLastIndex((k) => !k.correct);
+  const quit = abandoned && {
+    abandoned: true,
+    lastMistake: lastWrong < 0 ? null : { expected: keystrokes[lastWrong].expected, typed: keystrokes[lastWrong].typed },
+    sinceMistake: lastWrong < 0 ? null : keystrokes.length - 1 - lastWrong, // keystrokes typed after it before quitting
+  };
 
   const segmentMinutes = durationMs / SEGMENTS / 60000;
   return {
@@ -78,5 +89,6 @@ export function summarize({ engine, durationMs, settings, date }) {
       wpm: segmentMinutes > 0 ? ok / 5 / segmentMinutes : 0,
       accuracy: all ? (ok / all) * 100 : null,
     })),
+    ...quit,
   };
 }

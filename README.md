@@ -9,6 +9,7 @@ A typing test in the browser that finds the keys and words you type badly and tr
 - Timed tests on random common words, lowercase or with punctuation and capitals. Pick 15, 30, 60 or 120 seconds, or any custom length.
 - After every test: speed, accuracy, a keyboard showing the keys you missed, what you typed instead, your slowest letter pairs, and one specific tip.
 - Weak-point mode: practice built from the words you get wrong plus words that share the same tricky letter groups. Unlocks after 3 tests.
+- Every attempt counts: if you restart or reload before the timer ends, the mistakes from that attempt still feed your weak keys, weak words and weak-point practice. Speed and accuracy history only ever use finished tests.
 - Optional AI coach: Claude or Gemini reads your whole history and tells you what is improving, what is stuck and what to drill next. Uses your own API key.
 - Instant reload. Press `Tab` to restart a test. Backspace goes back into a mistyped word, even after the space.
 - Export, import and clear your history from Settings.
@@ -52,6 +53,8 @@ The coach is optional. Everything else works without it.
 Your typing history stays in your browser. Clearing site data deletes it, so use **Settings → Export history** to keep a backup. Importing a backup replaces the current history.
 
 Each test is stored as a summary (scores, per-key misses, letter-pair times, per-word errors), not as individual keypresses.
+
+Attempts you quit early are kept apart from finished tests: their mistakes are added to the weak-key and weak-word totals, and the last 200 are logged with how long they lasted and the mistake that came right before quitting. The AI coach uses that to tell you whether you have a habit of restarting after errors.
 
 ## Credits
 

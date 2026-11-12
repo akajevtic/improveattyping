@@ -24,8 +24,9 @@ export const SDK_URL = 'https://esm.sh/@anthropic-ai/sdk@1.8.0';
 export const COACH_MIN_TESTS = 3;
 const RECENT_TESTS = 40;
 const MIN_KEY_SAMPLES = 20;
+const QUIT_RIGHT_AFTER_KEYS = 3; // quitting within this many keystrokes of a mistake counts as "right after"
 
-export const COACH_SYSTEM = `You are a typing coach. The user message is a JSON summary of one person's whole typing-test history from an app called Weak Keys: recent tests, per-key miss rates early versus late in their history, most common wrong-key confusions, slowest letter pairs, and the words they miss most. Segment arrays split each test into four equal time slices.
+export const COACH_SYSTEM = `You are a typing coach. The user message is a JSON summary of one person's whole typing-test history from an app called Weak Keys: recent tests, per-key miss rates early versus late in their history, most common wrong-key confusions, slowest letter pairs, and the words they miss most. Segment arrays split each test into four equal time slices. "abandoned" covers attempts they quit before the timer ended, by restarting or reloading: how often, how soon, and the mistake that came right before quitting. Abandoned attempts are not part of the speed and accuracy numbers.
 
 Write coaching for that person. Rules:
 - Every claim must cite their own data: name the key, pair or word and give the number.
@@ -33,6 +34,7 @@ Write coaching for that person. Rules:
 - Look for behavior patterns across tests, such as accuracy or speed falling in later slices, or punctuation tests hurting specific keys. Mention a pattern only if the data shows it.
 - Where a confusion suggests a physical cause, such as a neighbouring key or a weak finger, say so briefly.
 - Finish with a plan for the next week: at most three drills, each with what to practice, for how long, and a target number.
+- If "abandoned" shows a habit of restarting right after an error, name it with the numbers and say what to do instead. If quitting is rare, leave it out.
 - If the history is too small to support a point, say that instead of guessing.
 - No generic advice. No praise without a number behind it.
 - Plain text, no markdown, under 250 words. Use short paragraphs and a short numbered plan.`;
@@ -47,8 +49,47 @@ function topConfusion(as = {}) {
   return top ? keyName(top[0]) : null;
 }
 
+// How often tests are quit early, how soon, and what mistake came right before. `quits` is the recent log.
+function abandonedSection(tests, agg, quits) {
+  const total = agg.quitCount ?? 0;
+  if (!total) return { total: 0 };
+
+  const durations = quits.map((q) => q?.ms).filter(Number.isFinite).sort((a, b) => a - b);
+  const mid = durations.length >> 1;
+  const median = durations.length % 2 ? durations[mid] : (durations[mid - 1] + durations[mid]) / 2;
+
+  const mistakes = new Map();
+  for (const q of quits) {
+    if (!q?.lastMistake) continue;
+    const id = JSON.stringify([q.lastMistake.expected, q.lastMistake.typed]);
+    mistakes.set(id, (mistakes.get(id) ?? 0) + 1);
+  }
+  const rightAfter = quits.filter((q) => Number.isFinite(q?.sinceMistake) && q.sinceMistake <= QUIT_RIGHT_AFTER_KEYS).length;
+
+  return {
+    total,
+    finishedTests: tests.length,
+    quitRate: round1((total / (total + tests.length)) * 100),
+    recentAttempts: quits.length,
+    quitRightAfterMistakeRate: quits.length ? round1((rightAfter / quits.length) * 100) : null,
+    medianSecondsBeforeQuit: round1(median / 1000),
+    lastMistakeBeforeQuit: [...mistakes]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([id, count]) => {
+        const [expected, typed] = JSON.parse(id);
+        return { expected: expected === null ? 'extra letter' : keyName(expected), typed: keyName(typed), count };
+      }),
+    keys: Object.entries(agg.quitKeys ?? {})
+      .filter(([, k]) => k.n >= 10)
+      .map(([key, k]) => ({ key: keyName(key), n: k.n, missRate: missRate(k) }))
+      .sort((a, b) => b.missRate - a.missRate)
+      .slice(0, 8),
+  };
+}
+
 // Compact picture of the whole history. Summaries only: the raw keystrokes were never stored.
-export function buildCoachPayload(tests, agg) {
+export function buildCoachPayload(tests, agg, quits = []) {
   const all = sumKeys(tests);
   const half = Math.floor(tests.length / 2);
   const early = sumKeys(tests.slice(0, half));
@@ -85,6 +126,7 @@ export function buildCoachPayload(tests, agg) {
     confusions: confusions.map((c) => ({ expected: keyName(c.expected), typed: keyName(c.typed), count: c.count })),
     slowPairs: slowPairs.map((p) => ({ pair: p.pair, avgMs: round1(p.avg), timesSlowerThanUsual: round1(p.ratio) })),
     weakWords: weakWords.map((w) => ({ word: w.word, n: w.n, err: w.err, cleanStreak: agg.words[w.word]?.ok ?? 0 })),
+    abandoned: abandonedSection(tests, agg, quits),
   };
 }
 

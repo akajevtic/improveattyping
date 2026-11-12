@@ -2,7 +2,8 @@
 // shortcut: localStorage holds roughly 6,000 tests at ~0.7 KB each, move to IndexedDB when users report StorageFullError
 
 // apiKey is the Claude key (the name predates Gemini support; renaming it would lose keys users already saved)
-export const KEYS = { tests: 'wk.tests', agg: 'wk.agg', settings: 'wk.settings', apiKey: 'wk.apiKey', geminiKey: 'wk.geminiKey', coach: 'wk.coach' };
+export const KEYS = { tests: 'wk.tests', agg: 'wk.agg', settings: 'wk.settings', apiKey: 'wk.apiKey', geminiKey: 'wk.geminiKey', coach: 'wk.coach', quits: 'wk.quits' };
+export const QUIT_LOG_MAX = 200; // abandoned attempts kept in detail; older ones live on only in the totals
 export const DEFAULT_SETTINGS = { seconds: 30, punctuation: false, list: 'english', weak: false, model: 'claude-opus-5-5' };
 const APP = 'weak-keys';
 
@@ -31,11 +32,12 @@ function read(storage, key, isValid, fallback) {
 }
 
 export const loadTests = (storage) => read(storage, KEYS.tests, (v) => Array.isArray(v) && v.every(isTest), () => []);
+// The aggregate may also carry quitKeys and quitCount: per-key totals and the count of abandoned attempts.
 export const loadAgg = (storage) => read(storage, KEYS.agg, isAgg, emptyAgg);
+export const loadQuits = (storage) => read(storage, KEYS.quits, Array.isArray, () => []);
 
-export function saveTest(summary, storage) {
-  const { pairs, words, ...record } = summary;
-  const agg = loadAgg(storage);
+// Adds one summary's letter pairs and words to the running aggregate.
+function fold(agg, { pairs, words }) {
   for (const [pair, { n, ms }] of Object.entries(pairs)) {
     const p = (agg.pairs[pair] ??= { n: 0, ms: 0 });
     p.n += n;
@@ -48,11 +50,14 @@ export function saveTest(summary, storage) {
     w.ms += ms;
     w.ok = err > 0 ? 0 : w.ok + n;
   }
-  const tests = [...loadTests(storage), record];
+}
+
+// Writes the aggregate and one list together: if the second write fails, the first is put back.
+function writeBoth(storage, agg, listKey, list) {
   const previousAgg = storage.getItem(KEYS.agg);
   try {
     storage.setItem(KEYS.agg, JSON.stringify(agg));
-    storage.setItem(KEYS.tests, JSON.stringify(tests));
+    storage.setItem(listKey, JSON.stringify(list));
   } catch {
     try {
       if (previousAgg === null) storage.removeItem(KEYS.agg);
@@ -61,6 +66,37 @@ export function saveTest(summary, storage) {
     throw new StorageFullError();
   }
 }
+
+export function saveTest(summary, storage) {
+  const { pairs, words, ...record } = summary;
+  const agg = loadAgg(storage);
+  fold(agg, summary);
+  writeBoth(storage, agg, KEYS.tests, [...loadTests(storage), record]);
+}
+
+// An attempt quit before the timer ended. Its mistakes count toward weak keys, pairs and words,
+// but it is kept out of the test list, so speed and accuracy history only ever hold finished tests.
+export function saveQuit(summary, storage) {
+  const agg = loadAgg(storage);
+  fold(agg, summary);
+  agg.quitKeys = sumKeys([{ keys: agg.quitKeys ?? {} }, summary]);
+  agg.quitCount = (agg.quitCount ?? 0) + 1;
+  const { date, durationMs, settings, counts, lastMistake, sinceMistake } = summary;
+  const record = {
+    date,
+    ms: durationMs,
+    seconds: settings.seconds,
+    punctuation: Boolean(settings.punctuation),
+    weak: Boolean(settings.weak),
+    keystrokes: counts.correctKeys + counts.wrongKeys,
+    lastMistake,
+    sinceMistake,
+  };
+  writeBoth(storage, agg, KEYS.quits, [...loadQuits(storage), record].slice(-QUIT_LOG_MAX));
+}
+
+// Key stats over everything typed: finished tests plus abandoned attempts.
+export const historyKeys = (tests, agg) => sumKeys([...tests, { keys: agg.quitKeys ?? {} }]);
 
 export function sumKeys(tests) {
   const total = {};
@@ -75,19 +111,21 @@ export function sumKeys(tests) {
   return total;
 }
 
-// Deliberately only tests and aggregate: never settings, never the API key.
+// Deliberately only typing history: never settings, never an API key.
 export const exportData = (storage) =>
-  JSON.stringify({ app: APP, v: 1, tests: loadTests(storage), agg: loadAgg(storage) });
+  JSON.stringify({ app: APP, v: 1, tests: loadTests(storage), agg: loadAgg(storage), quits: loadQuits(storage) });
 
 export function importData(json, storage) {
   let data = null;
   try { data = JSON.parse(json); } catch { /* handled below */ }
-  if (!isObject(data) || data.app !== APP || !Array.isArray(data.tests) || !data.tests.every(isTest) || !isAgg(data.agg)) {
+  const quits = isObject(data) ? data.quits ?? [] : null; // files exported before abandoned attempts existed have none
+  if (!isObject(data) || data.app !== APP || !Array.isArray(data.tests) || !data.tests.every(isTest) || !isAgg(data.agg) || !Array.isArray(quits)) {
     throw new Error('Not a Weak Keys history file');
   }
   try {
     storage.setItem(KEYS.agg, JSON.stringify(data.agg));
     storage.setItem(KEYS.tests, JSON.stringify(data.tests));
+    storage.setItem(KEYS.quits, JSON.stringify(quits.slice(-QUIT_LOG_MAX)));
   } catch {
     throw new StorageFullError();
   }
@@ -95,7 +133,7 @@ export function importData(json, storage) {
 }
 
 export function clearData(storage) {
-  for (const key of [KEYS.tests, KEYS.agg, KEYS.coach]) storage.removeItem(key);
+  for (const key of [KEYS.tests, KEYS.agg, KEYS.quits, KEYS.coach]) storage.removeItem(key);
 }
 
 // Last coach reading: { text, date, model }, or null.
